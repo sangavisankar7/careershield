@@ -47,11 +47,21 @@ async function askClaude(prompt) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ prompt }),
   });
-  if (!response.ok) throw new Error("API request failed");
   const data = await response.json();
+  if (!response.ok) {
+    const msg =
+      (data && data.error && (data.error.message || data.error)) ||
+      JSON.stringify(data) ||
+      `HTTP ${response.status}`;
+    throw new Error(`Backend error: ${msg}`);
+  }
   const text = (data.content || []).map((b) => b.text || "").join("\n");
   const cleaned = text.replace(/```json|```/g, "").trim();
-  return JSON.parse(cleaned);
+  try {
+    return JSON.parse(cleaned);
+  } catch (e) {
+    throw new Error(`Could not parse AI response: ${cleaned.slice(0, 200)}`);
+  }
 }
 
 /* ------------------------------------------------------------------ */
@@ -292,7 +302,7 @@ Score how ready this profile is for AI-era IT roles in India right now, and iden
       const res = await askClaude(prompt);
       setResult(res);
     } catch (e) {
-      setError("Couldn't reach the AI engine. Check your connection and try again.");
+      setError(e.message || "Couldn't reach the AI engine. Check your connection and try again.");
     }
     setLoading(false);
   };
@@ -379,7 +389,7 @@ function InterviewTab() {
       setQuestion(res.question);
       setStarted(true);
     } catch (e) {
-      setError("Couldn't start the interview. Check your connection and try again.");
+      setError(e.message || "Couldn't start the interview. Check your connection and try again.");
     }
     setLoading(false);
   };
@@ -412,7 +422,7 @@ Return ONLY minified JSON: {"feedback": "<feedback>", "score": <1-10 integer>, "
         setFinished(true);
       }
     } catch (e) {
-      setError("Couldn't reach the AI engine. Check your connection and try again.");
+      setError(e.message || "Couldn't reach the AI engine. Check your connection and try again.");
     }
     setLoading(false);
   };
@@ -480,320 +490,4 @@ Return ONLY minified JSON: {"feedback": "<feedback>", "score": <1-10 integer>, "
                 value={answer}
                 onChange={(e) => setAnswer(e.target.value)}
               />
-              <div className="panel-actions">
-                <span className="hint">Be specific — the AI scores substance, not length.</span>
-                <button className="btn btn-primary" onClick={submit} disabled={loading || !answer.trim()}>
-                  {loading ? <><Loader2 size={16} className="spin" /> Reviewing…</> : <><Send size={16} /> Submit answer</>}
-                </button>
-              </div>
-              <ErrorNote msg={error} />
-            </div>
-          ) : (
-            <div className="panel result-score">
-              <Gauge score={avgScore} label="INTERVIEW READINESS" />
-              <p className="result-summary">
-                {avgScore >= 70 ? "Strong session — you're close to placement-ready." : avgScore >= 45 ? "Decent foundation, but a few answers need more depth." : "Keep practicing — focus on specificity in your answers."}
-              </p>
-              <button className="btn btn-ghost" onClick={reset}><RotateCcw size={15} /> Start a new interview</button>
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/* Resume Checker tab                                                   */
-/* ------------------------------------------------------------------ */
-
-function ResumeTab() {
-  const [input, setInput] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState(null);
-  const [error, setError] = useState("");
-
-  const check = async () => {
-    if (!input.trim()) return;
-    setLoading(true);
-    setError("");
-    setResult(null);
-    try {
-      const prompt = `You are the AI Resume Checker inside CareerShield, scoring resumes against ATS filters tuned for AI-era IT roles in India in 2026. Resume text:
-"""
-${input}
-"""
-Return ONLY minified JSON, no markdown, in exactly this shape:
-{"atsScore": <integer 0-100>, "verdict": "<one direct line on where it stands>", "missingKeywords": ["<keyword>", "<keyword>", "<keyword>"], "suggestions": ["<concrete, line-level fix>", "<fix>", "<fix>"]}`;
-      const res = await askClaude(prompt);
-      setResult(res);
-    } catch (e) {
-      setError("Couldn't reach the AI engine. Check your connection and try again.");
-    }
-    setLoading(false);
-  };
-
-  return (
-    <div className="tab-pane">
-      <Eyebrow>PLACEMENT READINESS</Eyebrow>
-      <h2>AI Resume Checker.</h2>
-      <p className="muted">Scores your resume against ATS filters, flags missing AI-role keywords, and suggests concrete fixes.</p>
-
-      <div className="panel">
-        <textarea
-          className="textarea"
-          placeholder="Paste your resume text here…"
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          rows={6}
-        />
-        <div className="panel-actions">
-          <span className="hint">{input.length} characters</span>
-          <button className="btn btn-primary" onClick={check} disabled={loading || !input.trim()}>
-            {loading ? <><Loader2 size={16} className="spin" /> Scanning…</> : <><FileText size={16} /> Check my resume</>}
-          </button>
-        </div>
-        <ErrorNote msg={error} />
-      </div>
-
-      {result && (
-        <div className="result-grid">
-          <div className="panel result-score">
-            <Gauge score={result.atsScore} label="ATS MATCH SCORE" />
-            <p className="result-summary">{result.verdict}</p>
-          </div>
-          <div className="panel result-priorities">
-            <div className="panel-title"><AlertTriangle size={16} /> Missing keywords</div>
-            <div className="chip-row">
-              {(result.missingKeywords || []).map((k, i) => (
-                <span className="chip chip-static chip-warn" key={i}>{k}</span>
-              ))}
-            </div>
-            <div className="panel-title" style={{ marginTop: 16 }}><Sparkles size={16} /> Fix these</div>
-            {(result.suggestions || []).map((s, i) => (
-              <div className="priority-row" key={i}>
-                <span className="priority-num">{i + 1}</span>
-                <div className="priority-skill" style={{ fontWeight: 400 }}>{s}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/* App shell                                                           */
-/* ------------------------------------------------------------------ */
-
-export default function CareerShieldApp() {
-  const [tab, setTab] = useState("overview");
-
-  return (
-    <div className="app">
-      <style>{CSS}</style>
-
-      <nav className="navbar">
-        <div className="brand">
-          <Shield size={20} />
-          <span>CareerShield</span>
-        </div>
-        <div className="nav-tabs">
-          {TABS.map((t) => (
-            <button key={t.id} className={`nav-tab ${tab === t.id ? "nav-tab-active" : ""}`} onClick={() => setTab(t.id)}>
-              <t.Icon size={15} />
-              <span>{t.label}</span>
-            </button>
-          ))}
-        </div>
-      </nav>
-
-      <main className="main">
-        {tab === "overview" && <OverviewTab goTo={setTab} />}
-        {tab === "radar" && <LayoffRadarTab />}
-        {tab === "skills" && <SkillGapTab />}
-        {tab === "interview" && <InterviewTab />}
-        {tab === "resume" && <ResumeTab />}
-      </main>
-
-      <footer className="footer">
-        <div className="footer-brand"><Shield size={16} /> CareerShield</div>
-        <div className="footer-pills">Layoff Radar &middot; Skill Gap Analyzer &middot; AI Mock Interview &middot; Resume Checker</div>
-      </footer>
-    </div>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/* Styles                                                              */
-/* ------------------------------------------------------------------ */
-
-const CSS = `
-@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500;600&display=swap');
-
-:root{
-  --bg:#0F1B2E; --panel:#16243B; --panel-2:#1D2E4A; --border:#2A3B57;
-  --text:#E8EDF5; --dim:#93A3BE;
-  --amber:#E8A33D; --cyan:#4FC3D9; --red:#FF6B5C; --green:#3ECF8E;
-}
-*{box-sizing:border-box;}
-.app{ background:radial-gradient(1200px 600px at 80% -10%, #17294550 0%, transparent 60%), var(--bg);
-  min-height:100vh; color:var(--text); font-family:'Inter',sans-serif; }
-h1,h2{ font-family:'Space Grotesk',sans-serif; margin:0 0 10px; line-height:1.15; letter-spacing:-0.01em; }
-h1{ font-size:clamp(30px,4vw,44px); }
-h2{ font-size:clamp(22px,2.6vw,28px); }
-p{ margin:0; }
-.muted{ color:var(--dim); font-size:14.5px; line-height:1.6; }
-.eyebrow{ font-family:'JetBrains Mono',monospace; font-size:11.5px; letter-spacing:.14em; color:var(--cyan); margin-bottom:10px; }
-
-.navbar{ position:sticky; top:0; z-index:20; display:flex; align-items:center; justify-content:space-between;
-  padding:14px 28px; background:#0F1B2Ecc; backdrop-filter:blur(10px); border-bottom:1px solid var(--border); flex-wrap:wrap; gap:10px; }
-.brand{ display:flex; align-items:center; gap:8px; font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:17px; color:var(--cyan); }
-.nav-tabs{ display:flex; gap:4px; flex-wrap:wrap; }
-.nav-tab{ display:flex; align-items:center; gap:6px; background:transparent; border:1px solid transparent; color:var(--dim);
-  font-family:'Inter',sans-serif; font-size:13px; font-weight:500; padding:8px 12px; border-radius:8px; cursor:pointer; transition:.15s; }
-.nav-tab:hover{ color:var(--text); background:var(--panel); }
-.nav-tab-active{ color:var(--bg); background:var(--cyan); }
-.nav-tab-active:hover{ color:var(--bg); background:var(--cyan); }
-
-.main{ max-width:1080px; margin:0 auto; padding:40px 28px 80px; }
-.tab-pane h2{ margin-top:2px; }
-
-.hero{ display:flex; align-items:center; justify-content:space-between; gap:40px; padding:20px 0 44px; flex-wrap:wrap; }
-.hero-copy{ flex:1 1 420px; max-width:560px; }
-.hero-sub{ color:var(--dim); font-size:16px; line-height:1.65; margin-top:12px; }
-.hero-actions{ display:flex; gap:12px; margin-top:26px; flex-wrap:wrap; }
-
-.btn{ display:inline-flex; align-items:center; gap:8px; font-family:'Inter',sans-serif; font-weight:600; font-size:14px;
-  padding:12px 20px; border-radius:10px; border:1px solid transparent; cursor:pointer; transition:.15s; white-space:nowrap; }
-.btn:disabled{ opacity:.5; cursor:not-allowed; }
-.btn-primary{ background:var(--cyan); color:#08151F; }
-.btn-primary:hover:not(:disabled){ background:#6ad3e6; }
-.btn-ghost{ background:transparent; border-color:var(--border); color:var(--text); }
-.btn-ghost:hover{ background:var(--panel); }
-
-/* Radar viz */
-.radar-viz{ position:relative; width:260px; height:260px; flex:0 0 260px; border-radius:50%;
-  background:radial-gradient(circle at center, #123049 0%, #0D1930 75%); border:1px solid var(--border); overflow:hidden; }
-.radar-ring{ position:absolute; border:1px solid #2A3B5780; border-radius:50%; top:50%; left:50%; transform:translate(-50%,-50%); }
-.r1{ width:62%; height:62%; } .r2{ width:84%; height:84%; } .r3{ width:100%; height:100%; }
-.radar-cross{ position:absolute; background:#2A3B5780; }
-.radar-cross-h{ width:100%; height:1px; top:50%; left:0; }
-.radar-cross-v{ width:1px; height:100%; top:0; left:50%; }
-.radar-sweep{ position:absolute; inset:0; border-radius:50%;
-  background:conic-gradient(from 0deg, #4FC3D955 0deg, transparent 60deg, transparent 360deg);
-  animation:sweep 4s linear infinite; }
-@keyframes sweep{ to{ transform:rotate(360deg); } }
-.radar-center{ position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); color:var(--cyan);
-  background:#0D1930; border:1px solid var(--border); border-radius:50%; width:36px; height:36px; display:flex; align-items:center; justify-content:center; }
-.blip-hit{ position:absolute; transform:translate(-50%,-50%); cursor:pointer; display:flex; align-items:center; justify-content:center; }
-.blip-ping{ position:absolute; border-radius:50%; opacity:.5; animation:ping 2.2s ease-out infinite; }
-@keyframes ping{ 0%{ transform:scale(.6); opacity:.55; } 100%{ transform:scale(2); opacity:0; } }
-.blip-dot{ position:relative; border-radius:50%; box-shadow:0 0 8px currentColor; }
-.blip-tag{ position:absolute; bottom:120%; left:50%; transform:translateX(-50%); background:#0D1930; border:1px solid var(--border);
-  border-radius:8px; padding:8px 10px; font-size:11.5px; white-space:nowrap; display:flex; flex-direction:column; gap:2px; z-index:5; }
-.blip-tag strong{ font-family:'Space Grotesk',sans-serif; font-size:12.5px; }
-.blip-tag span{ color:var(--dim); }
-
-.stat-grid{ display:grid; grid-template-columns:repeat(auto-fit,minmax(190px,1fr)); gap:14px; margin-bottom:52px; }
-.stat-card{ background:var(--panel); border:1px solid var(--border); border-radius:14px; padding:18px; }
-.stat-value{ font-family:'JetBrains Mono',monospace; font-size:26px; font-weight:600; margin-top:10px; }
-.stat-label{ color:var(--dim); font-size:12.5px; margin-top:4px; }
-.tone-amber svg{ color:var(--amber); } .tone-cyan svg{ color:var(--cyan); }
-.tone-red svg{ color:var(--red); } .tone-green svg{ color:var(--green); }
-
-.paradox{ margin-bottom:52px; }
-.bar-compare{ margin-top:22px; display:flex; flex-direction:column; gap:14px; }
-.bar-row{ display:grid; grid-template-columns:150px 1fr 56px; align-items:center; gap:14px; }
-.bar-name{ font-size:13.5px; color:var(--dim); }
-.bar-track{ height:10px; background:var(--panel-2); border-radius:6px; overflow:hidden; }
-.bar-fill{ height:100%; border-radius:6px; }
-.bar-neg{ background:var(--red); } .bar-pos{ background:var(--green); }
-.bar-val{ font-family:'JetBrains Mono',monospace; font-size:13.5px; font-weight:600; text-align:right; }
-.bar-val.neg{ color:var(--red); } .bar-val.pos{ color:var(--green); }
-
-.loop{ margin-bottom:20px; }
-.loop-row{ display:flex; align-items:center; gap:8px; margin-top:22px; flex-wrap:wrap; }
-.loop-card{ flex:1 1 200px; text-align:left; background:var(--panel); border:1px solid var(--border); border-radius:14px;
-  padding:18px; cursor:pointer; color:var(--text); transition:.15s; }
-.loop-card:hover{ border-color:var(--cyan); background:var(--panel-2); }
-.loop-card svg{ color:var(--cyan); }
-.loop-title{ font-family:'Space Grotesk',sans-serif; font-weight:600; margin-top:10px; font-size:15px; }
-.loop-desc{ color:var(--dim); font-size:12.5px; margin-top:4px; line-height:1.5; }
-.loop-arrow{ color:var(--border); flex:0 0 auto; }
-
-.filter-row{ display:flex; gap:8px; margin:20px 0 16px; }
-.chip{ font-family:'Inter',sans-serif; font-size:12.5px; font-weight:500; padding:7px 13px; border-radius:20px;
-  border:1px solid var(--border); background:transparent; color:var(--dim); cursor:pointer; transition:.15s; }
-.chip:hover{ color:var(--text); }
-.chip-active{ background:var(--cyan); color:#08151F; border-color:var(--cyan); }
-.chip-static{ display:inline-flex; align-items:center; gap:5px; cursor:default; color:var(--text); background:var(--panel-2); }
-.chip-static svg{ color:var(--green); }
-.chip-warn{ color:var(--amber); border-color:#E8A33D55; }
-.chip-row{ display:flex; gap:8px; flex-wrap:wrap; margin-top:10px; }
-
-.table-wrap{ background:var(--panel); border:1px solid var(--border); border-radius:14px; overflow:hidden; margin-top:6px; }
-.radar-table{ width:100%; border-collapse:collapse; font-size:13.5px; }
-.radar-table th{ text-align:left; font-family:'JetBrains Mono',monospace; font-size:11px; letter-spacing:.08em; color:var(--dim);
-  padding:13px 16px; border-bottom:1px solid var(--border); font-weight:500; }
-.radar-table td{ padding:13px 16px; border-bottom:1px solid #22314A; }
-.radar-table tr:last-child td{ border-bottom:none; }
-.cell-name{ font-weight:600; } .cell-num{ font-family:'JetBrains Mono',monospace; }
-.status-pill{ display:inline-flex; align-items:center; gap:5px; font-size:11.5px; font-weight:600; padding:4px 9px; border-radius:20px; }
-.status-red{ background:#FF6B5C22; color:var(--red); } .status-amber{ background:#E8A33D22; color:var(--amber); }
-
-.panel{ background:var(--panel); border:1px solid var(--border); border-radius:14px; padding:20px; margin-top:18px; }
-.panel-title{ display:flex; align-items:center; gap:8px; font-family:'Space Grotesk',sans-serif; font-weight:600; font-size:14.5px; margin-bottom:12px; }
-.textarea{ width:100%; background:var(--panel-2); border:1px solid var(--border); border-radius:10px; color:var(--text);
-  font-family:'Inter',sans-serif; font-size:14px; padding:13px; resize:vertical; outline:none; }
-.textarea:focus{ border-color:var(--cyan); }
-.panel-actions{ display:flex; align-items:center; justify-content:space-between; margin-top:12px; gap:12px; flex-wrap:wrap; }
-.hint{ color:var(--dim); font-size:12px; display:flex; align-items:center; gap:6px; }
-.error-note{ display:flex; align-items:center; gap:7px; color:var(--red); font-size:13px; margin-top:10px; }
-.spin{ animation:spin 1s linear infinite; } @keyframes spin{ to{ transform:rotate(360deg); } }
-
-.result-grid{ display:grid; grid-template-columns:280px 1fr; gap:16px; margin-top:16px; }
-@media(max-width:720px){ .result-grid{ grid-template-columns:1fr; } }
-.result-score{ display:flex; flex-direction:column; align-items:center; text-align:center; gap:14px; }
-.result-summary{ color:var(--dim); font-size:13.5px; line-height:1.6; }
-.gauge-wrap{ display:flex; flex-direction:column; align-items:center; gap:8px; }
-.gauge{ width:130px; height:130px; border-radius:50%; display:flex; align-items:center; justify-content:center; }
-.gauge-inner{ width:100px; height:100px; border-radius:50%; background:var(--panel); display:flex; flex-direction:column;
-  align-items:center; justify-content:center; }
-.gauge-num{ font-family:'JetBrains Mono',monospace; font-size:28px; font-weight:600; }
-.gauge-pct{ font-size:11px; color:var(--dim); }
-.gauge-label{ font-family:'JetBrains Mono',monospace; font-size:11px; letter-spacing:.1em; color:var(--dim); }
-.priority-row{ display:flex; gap:12px; align-items:flex-start; padding:10px 0; border-top:1px solid #22314A; }
-.priority-row:first-of-type{ border-top:none; }
-.priority-num{ font-family:'JetBrains Mono',monospace; color:var(--cyan); font-size:13px; padding-top:1px; }
-.priority-skill{ font-weight:600; font-size:14px; } .priority-reason{ margin-top:2px; }
-
-.domain-pick{ text-align:left; }
-.domain-grid{ display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:10px; }
-.domain-btn{ display:flex; align-items:center; gap:9px; background:var(--panel-2); border:1px solid var(--border); color:var(--text);
-  padding:13px 14px; border-radius:10px; cursor:pointer; font-size:13.5px; font-weight:500; transition:.15s; }
-.domain-btn:hover:not(:disabled){ border-color:var(--cyan); }
-.domain-btn svg{ color:var(--cyan); }
-
-.interview-shell{ margin-top:16px; }
-.interview-meta{ display:flex; justify-content:space-between; font-family:'JetBrains Mono',monospace; font-size:11.5px;
-  color:var(--dim); letter-spacing:.05em; margin-bottom:10px; }
-.chat-log{ display:flex; flex-direction:column; gap:14px; max-height:420px; overflow-y:auto; padding-right:4px; }
-.chat-block{ background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:14px 16px; }
-.chat-block.active{ border-color:#4FC3D955; }
-.chat-q{ display:flex; gap:8px; font-weight:600; font-size:14px; color:var(--cyan); }
-.chat-a{ margin-top:10px; font-size:13.5px; color:var(--text); background:var(--panel-2); border-radius:8px; padding:10px 12px; }
-.chat-feedback{ margin-top:10px; font-size:12.5px; color:var(--dim); line-height:1.6; }
-.feedback-score{ font-family:'JetBrains Mono',monospace; color:var(--green); font-weight:600; margin-right:8px; }
-
-.footer{ border-top:1px solid var(--border); padding:24px 28px; display:flex; justify-content:space-between;
-  align-items:center; flex-wrap:wrap; gap:8px; color:var(--dim); font-size:12.5px; }
-.footer-brand{ display:flex; align-items:center; gap:7px; color:var(--text); font-weight:600; font-family:'Space Grotesk',sans-serif; }
-
-@media(max-width:640px){
-  .navbar{ padding:12px 16px; } .main{ padding:28px 16px 60px; }
-  .radar-viz{ width:200px; height:200px; flex-basis:200px; }
-  .nav-tab span{ display:none; } .nav-tab{ padding:9px; }
-}
-`;
+              <div cla
