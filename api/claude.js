@@ -8,38 +8,41 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: "Missing 'prompt' in request body" });
   }
 
-  const apiKey = process.env.GEMINI_API_KEY;
+  const apiKey = process.env.GROQ_API_KEY;
   if (!apiKey) {
-    return res.status(500).json({ error: "Server is missing GEMINI_API_KEY" });
+    return res.status(500).json({ error: "Server is missing GROQ_API_KEY" });
   }
 
   try {
-    const geminiRes = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+    const groqRes = await fetch(
+      "https://api.groq.com/openai/v1/chat/completions",
       {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${apiKey}`,
+        },
         body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
+          model: "llama-3.3-70b-versatile",
+          messages: [{ role: "user", content: prompt }],
         }),
       }
     );
 
-    const data = await geminiRes.json();
+    const data = await groqRes.json();
 
-    if (!geminiRes.ok) {
-      const msg = (data && data.error && data.error.message) || "Gemini API request failed";
-      return res.status(geminiRes.status).json({ error: msg });
+    if (!groqRes.ok) {
+      const msg = (data && data.error && data.error.message) || "Groq API request failed";
+      return res.status(groqRes.status).json({ error: msg });
     }
 
     const text =
-      (data && data.candidates && data.candidates[0] && data.candidates[0].content &&
-        data.candidates[0].content.parts
-          ? data.candidates[0].content.parts.map((p) => p.text || "").join("\n")
-          : "");
+      (data && data.choices && data.choices[0] && data.choices[0].message
+        ? data.choices[0].message.content || ""
+        : "");
 
     return res.status(200).json({ content: [{ text }] });
   } catch (err) {
-    return res.status(500).json({ error: "Failed to reach the Gemini API" });
+    return res.status(500).json({ error: "Failed to reach the Groq API" });
   }
 }
