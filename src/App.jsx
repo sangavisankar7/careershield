@@ -24,7 +24,11 @@ const STATS = [
   { label: "YoY AI-role hiring", value: "+16%", Icon: TrendingUp, tone: "green" },
 ];
 
-const DOMAINS = ["AI/ML Engineer", "Full-Stack Developer", "Data Analyst", "Cloud/DevOps Engineer"];
+const DOMAINS = [
+  "AI/ML Engineer", "Full-Stack Developer", "Data Analyst", "Cloud/DevOps Engineer",
+  "Mechanical Engineer", "Civil Engineer", "Electronics Engineer", "Marketing / Sales",
+  "Finance / Accounting", "HR / Management", "MBA / General Management",
+];
 const MAX_Q = 4;
 
 const TABS = [
@@ -121,8 +125,13 @@ async function extractTextFromFile(file) {
 /* Shared bits                                                         */
 /* ------------------------------------------------------------------ */
 
-function Eyebrow({ children }) {
-  return <div className="eyebrow">{children}</div>;
+function Eyebrow({ children, live }) {
+  return (
+    <div className="eyebrow">
+      {live && <span className="live-dot" />}
+      {children}
+    </div>
+  );
 }
 
 function Gauge({ score, label }) {
@@ -207,8 +216,8 @@ function OverviewTab({ goTo }) {
     <div className="tab-pane overview">
       <section className="hero">
         <div className="hero-copy">
-          <Eyebrow>PROJECT EXPO 2026 &middot; LIVE DEMO</Eyebrow>
-          <h1>The shift nobody warned them about.</h1>
+          <Eyebrow live>PROJECT EXPO 2026 &middot; LIVE DEMO</Eyebrow>
+          <h1>The shift nobody <span className="grad-text">warned</span> them about.</h1>
           <p className="hero-sub">
             India's IT sector is being reshaped by AI faster than its workforce can adapt.
             CareerShield tracks the layoffs, scores the gap, and gets you ready before it's your turn.
@@ -228,7 +237,7 @@ function OverviewTab({ goTo }) {
       <section className="stat-grid">
         {STATS.map((s) => (
           <div className={`stat-card tone-${s.tone}`} key={s.label}>
-            <s.Icon size={18} />
+            <div className="stat-icon"><s.Icon size={18} /></div>
             <div className="stat-value">{s.value}</div>
             <div className="stat-label">{s.label}</div>
           </div>
@@ -420,6 +429,7 @@ Score how ready this profile is for AI-era IT roles in India right now, and iden
 
 function InterviewTab() {
   const [domain, setDomain] = useState(null);
+  const [customDomain, setCustomDomain] = useState("");
   const [started, setStarted] = useState(false);
   const [question, setQuestion] = useState("");
   const [answer, setAnswer] = useState("");
@@ -437,7 +447,7 @@ function InterviewTab() {
     setLoading(true);
     setError("");
     try {
-      const prompt = `You are the AI interviewer inside CareerShield, running a mock interview for a "${d}" role at an Indian IT company in the current AI-hiring climate. Ask the first question — a warm but substantive opener, technical or behavioral. Return ONLY minified JSON: {"question": "<question text>"}`;
+      const prompt = `You are the AI interviewer inside CareerShield, running a placement mock interview for a "${d}" role/track in India, in the current job market. Tailor questions to what this specific field actually expects a fresher or early-career candidate to know. Ask the first question — a warm but substantive opener, technical or behavioral. Return ONLY minified JSON: {"question": "<question text>"}`;
       const res = await askClaude(prompt);
       setQuestion(res.question);
       setStarted(true);
@@ -491,7 +501,7 @@ Return ONLY minified JSON: {"feedback": "<feedback>", "score": <1-10 integer>, "
     <div className="tab-pane">
       <Eyebrow>PLACEMENT READINESS</Eyebrow>
       <h2>Practice before it counts.</h2>
-      <p className="muted">Technical + HR rounds, domain-specific, with instant AI feedback on every answer.</p>
+      <p className="muted">Technical + HR rounds, tailored to your field, with instant AI feedback on every answer.</p>
 
       {!started && (
         <div className="panel domain-pick">
@@ -503,6 +513,29 @@ Return ONLY minified JSON: {"feedback": "<feedback>", "score": <1-10 integer>, "
               </button>
             ))}
           </div>
+
+          <div className="custom-domain-row">
+            <span className="hint">Don't see your field? Type it below.</span>
+            <div className="custom-domain-input">
+              <input
+                type="text"
+                className="text-input"
+                placeholder="e.g. Pharmacy, Journalism, Textile Engineering, BCom..."
+                value={customDomain}
+                onChange={(e) => setCustomDomain(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter" && customDomain.trim()) start(customDomain.trim()); }}
+                disabled={loading}
+              />
+              <button
+                className="btn btn-primary"
+                onClick={() => customDomain.trim() && start(customDomain.trim())}
+                disabled={loading || !customDomain.trim()}
+              >
+                <ArrowRight size={16} />
+              </button>
+            </div>
+          </div>
+
           {loading && <div className="hint"><Loader2 size={14} className="spin" /> Preparing your first question…</div>}
           <ErrorNote msg={error} />
         </div>
@@ -717,6 +750,7 @@ export default function CareerShieldApp() {
   return (
     <div className="app">
       <style>{CSS}</style>
+      <div className="bg-grid" aria-hidden="true" />
 
       <nav className="navbar">
         <div className="brand">
@@ -757,49 +791,70 @@ const CSS = `
 @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500;600&display=swap');
 
 :root{
-  --bg:#0F1B2E; --panel:#16243B; --panel-2:#1D2E4A; --border:#2A3B57;
-  --text:#E8EDF5; --dim:#93A3BE;
-  --amber:#E8A33D; --cyan:#4FC3D9; --red:#FF6B5C; --green:#3ECF8E;
+  --bg:#0A1220; --panel:#111D31; --panel-2:#16233B; --border:#243755;
+  --text:#EAF0FA; --dim:#8CA0C4;
+  --amber:#F5A623; --cyan:#4FD8E8; --violet:#8B7CF6; --red:#FF5C5C; --green:#34D399;
 }
 *{box-sizing:border-box;}
-.app{ background:radial-gradient(1200px 600px at 80% -10%, #17294550 0%, transparent 60%), var(--bg);
-  min-height:100vh; color:var(--text); font-family:'Inter',sans-serif; }
-h1,h2{ font-family:'Space Grotesk',sans-serif; margin:0 0 10px; line-height:1.15; letter-spacing:-0.01em; }
-h1{ font-size:clamp(30px,4vw,44px); }
+.app{ position:relative; background:
+    radial-gradient(1100px 620px at 84% -8%, #1B3B5540 0%, transparent 62%),
+    radial-gradient(900px 500px at -10% 40%, #2A2A5A2e 0%, transparent 55%),
+    var(--bg);
+  min-height:100vh; color:var(--text); font-family:'Inter',sans-serif; isolation:isolate; }
+.bg-grid{ position:fixed; inset:0; z-index:0; pointer-events:none;
+  background-image:
+    linear-gradient(rgba(79,216,232,.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(79,216,232,.05) 1px, transparent 1px);
+  background-size:46px 46px;
+  -webkit-mask-image:radial-gradient(ellipse 75% 55% at 50% 0%, black 0%, transparent 72%);
+          mask-image:radial-gradient(ellipse 75% 55% at 50% 0%, black 0%, transparent 72%); }
+.navbar,.main,.footer{ position:relative; z-index:1; }
+h1,h2{ font-family:'Space Grotesk',sans-serif; margin:0 0 10px; line-height:1.14; letter-spacing:-0.015em; }
+h1{ font-size:clamp(32px,4.6vw,52px); }
 h2{ font-size:clamp(22px,2.6vw,28px); }
 p{ margin:0; }
 .muted{ color:var(--dim); font-size:14.5px; line-height:1.6; }
-.eyebrow{ font-family:'JetBrains Mono',monospace; font-size:11.5px; letter-spacing:.14em; color:var(--cyan); margin-bottom:10px; }
+.eyebrow{ display:flex; align-items:center; gap:8px; font-family:'JetBrains Mono',monospace; font-size:11.5px;
+  letter-spacing:.14em; color:var(--cyan); margin-bottom:10px; }
+.live-dot{ width:6px; height:6px; border-radius:50%; background:var(--cyan); flex:0 0 auto;
+  box-shadow:0 0 0 0 rgba(79,216,232,.6); animation:livepulse 2s infinite; }
+@keyframes livepulse{ 0%{ box-shadow:0 0 0 0 rgba(79,216,232,.55); } 70%{ box-shadow:0 0 0 8px rgba(79,216,232,0); } 100%{ box-shadow:0 0 0 0 rgba(79,216,232,0); } }
+.grad-text{ background:linear-gradient(90deg, var(--cyan), var(--violet)); -webkit-background-clip:text; background-clip:text; color:transparent; }
 
 .navbar{ position:sticky; top:0; z-index:20; display:flex; align-items:center; justify-content:space-between;
-  padding:14px 28px; background:#0F1B2Ecc; backdrop-filter:blur(10px); border-bottom:1px solid var(--border); flex-wrap:wrap; gap:10px; }
+  padding:14px 28px; background:#0A1220cc; backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px);
+  border-bottom:1px solid var(--border); flex-wrap:wrap; gap:10px; }
 .brand{ display:flex; align-items:center; gap:8px; font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:17px; color:var(--cyan); }
 .nav-tabs{ display:flex; gap:4px; flex-wrap:wrap; }
 .nav-tab{ display:flex; align-items:center; gap:6px; background:transparent; border:1px solid transparent; color:var(--dim);
-  font-family:'Inter',sans-serif; font-size:13px; font-weight:500; padding:8px 12px; border-radius:8px; cursor:pointer; transition:.15s; }
+  font-family:'Inter',sans-serif; font-size:13px; font-weight:500; padding:8px 12px; border-radius:8px; cursor:pointer; transition:.18s ease; }
 .nav-tab:hover{ color:var(--text); background:var(--panel); }
-.nav-tab-active{ color:var(--bg); background:var(--cyan); }
+.nav-tab-active{ color:var(--bg); background:var(--cyan); box-shadow:0 6px 18px -6px rgba(79,216,232,.55); }
 .nav-tab-active:hover{ color:var(--bg); background:var(--cyan); }
 
 .main{ max-width:1080px; margin:0 auto; padding:40px 28px 80px; }
 .tab-pane h2{ margin-top:2px; }
 
 .hero{ display:flex; align-items:center; justify-content:space-between; gap:40px; padding:20px 0 44px; flex-wrap:wrap; }
-.hero-copy{ flex:1 1 420px; max-width:560px; }
+.hero-copy{ flex:1 1 420px; max-width:580px; animation:fadeUp .65s ease both; }
 .hero-sub{ color:var(--dim); font-size:16px; line-height:1.65; margin-top:12px; }
 .hero-actions{ display:flex; gap:12px; margin-top:26px; flex-wrap:wrap; }
+@keyframes fadeUp{ from{ opacity:0; transform:translateY(16px); } to{ opacity:1; transform:none; } }
+@keyframes fadeIn{ from{ opacity:0; transform:scale(.94); } to{ opacity:1; transform:none; } }
 
 .btn{ display:inline-flex; align-items:center; gap:8px; font-family:'Inter',sans-serif; font-weight:600; font-size:14px;
-  padding:12px 20px; border-radius:10px; border:1px solid transparent; cursor:pointer; transition:.15s; white-space:nowrap; }
+  padding:12px 20px; border-radius:10px; border:1px solid transparent; cursor:pointer; transition:.18s ease; white-space:nowrap; }
 .btn:disabled{ opacity:.5; cursor:not-allowed; }
-.btn-primary{ background:var(--cyan); color:#08151F; }
-.btn-primary:hover:not(:disabled){ background:#6ad3e6; }
+.btn-primary{ background:var(--cyan); color:#08151F; box-shadow:0 0 0 rgba(79,216,232,0); }
+.btn-primary:hover:not(:disabled){ background:#6ee3f0; box-shadow:0 10px 28px -8px rgba(79,216,232,.55); transform:translateY(-1px); }
 .btn-ghost{ background:transparent; border-color:var(--border); color:var(--text); }
-.btn-ghost:hover{ background:var(--panel); }
+.btn-ghost:hover{ background:var(--panel); border-color:var(--cyan); }
 
 /* Radar viz */
 .radar-viz{ position:relative; width:260px; height:260px; flex:0 0 260px; border-radius:50%;
-  background:radial-gradient(circle at center, #123049 0%, #0D1930 75%); border:1px solid var(--border); overflow:hidden; }
+  background:radial-gradient(circle at center, #123049 0%, #0D1930 75%); border:1px solid var(--border); overflow:hidden;
+  box-shadow:0 0 70px -12px rgba(79,216,232,.3), inset 0 0 40px -10px rgba(79,216,232,.15);
+  animation:fadeIn .8s ease .1s both; }
 .radar-ring{ position:absolute; border:1px solid #2A3B5780; border-radius:50%; top:50%; left:50%; transform:translate(-50%,-50%); }
 .r1{ width:62%; height:62%; } .r2{ width:84%; height:84%; } .r3{ width:100%; height:100%; }
 .radar-cross{ position:absolute; background:#2A3B5780; }
@@ -821,8 +876,11 @@ p{ margin:0; }
 .blip-tag span{ color:var(--dim); }
 
 .stat-grid{ display:grid; grid-template-columns:repeat(auto-fit,minmax(190px,1fr)); gap:14px; margin-bottom:52px; }
-.stat-card{ background:var(--panel); border:1px solid var(--border); border-radius:14px; padding:18px; }
-.stat-value{ font-family:'JetBrains Mono',monospace; font-size:26px; font-weight:600; margin-top:10px; }
+.stat-card{ background:var(--panel); border:1px solid var(--border); border-radius:14px; padding:18px; transition:.2s ease; }
+.stat-card:hover{ transform:translateY(-3px); border-color:#4FD8E866; box-shadow:0 14px 30px -14px rgba(0,0,0,.5); }
+.stat-icon{ width:36px; height:36px; border-radius:10px; display:flex; align-items:center; justify-content:center;
+  background:var(--panel-2); border:1px solid var(--border); }
+.stat-value{ font-family:'JetBrains Mono',monospace; font-size:27px; font-weight:600; margin-top:12px; }
 .stat-label{ color:var(--dim); font-size:12.5px; margin-top:4px; }
 .tone-amber svg{ color:var(--amber); } .tone-cyan svg{ color:var(--cyan); }
 .tone-red svg{ color:var(--red); } .tone-green svg{ color:var(--green); }
@@ -840,8 +898,9 @@ p{ margin:0; }
 .loop{ margin-bottom:20px; }
 .loop-row{ display:flex; align-items:center; gap:8px; margin-top:22px; flex-wrap:wrap; }
 .loop-card{ flex:1 1 200px; text-align:left; background:var(--panel); border:1px solid var(--border); border-radius:14px;
-  padding:18px; cursor:pointer; color:var(--text); transition:.15s; }
-.loop-card:hover{ border-color:var(--cyan); background:var(--panel-2); }
+  padding:18px; cursor:pointer; color:var(--text); transition:.2s ease; }
+.loop-card:hover{ border-color:var(--cyan); background:var(--panel-2); transform:translateY(-2px);
+  box-shadow:0 14px 30px -16px rgba(79,216,232,.35); }
 .loop-card svg{ color:var(--cyan); }
 .loop-title{ font-family:'Space Grotesk',sans-serif; font-weight:600; margin-top:10px; font-size:15px; }
 .loop-desc{ color:var(--dim); font-size:12.5px; margin-top:4px; line-height:1.5; }
@@ -867,7 +926,10 @@ p{ margin:0; }
 .status-pill{ display:inline-flex; align-items:center; gap:5px; font-size:11.5px; font-weight:600; padding:4px 9px; border-radius:20px; }
 .status-red{ background:#FF6B5C22; color:var(--red); } .status-amber{ background:#E8A33D22; color:var(--amber); }
 
-.panel{ background:var(--panel); border:1px solid var(--border); border-radius:14px; padding:20px; margin-top:18px; }
+.panel{ position:relative; background:var(--panel); border:1px solid var(--border); border-radius:14px; padding:20px;
+  margin-top:18px; overflow:hidden; }
+.panel::before{ content:""; position:absolute; top:0; left:0; right:0; height:2px;
+  background:linear-gradient(90deg, transparent, var(--cyan), transparent); opacity:.55; }
 .panel-title{ display:flex; align-items:center; gap:8px; font-family:'Space Grotesk',sans-serif; font-weight:600; font-size:14.5px; margin-bottom:12px; }
 .textarea{ width:100%; background:var(--panel-2); border:1px solid var(--border); border-radius:10px; color:var(--text);
   font-family:'Inter',sans-serif; font-size:14px; padding:13px; resize:vertical; outline:none; }
@@ -903,6 +965,12 @@ p{ margin:0; }
   padding:13px 14px; border-radius:10px; cursor:pointer; font-size:13.5px; font-weight:500; transition:.15s; }
 .domain-btn:hover:not(:disabled){ border-color:var(--cyan); }
 .domain-btn svg{ color:var(--cyan); }
+.custom-domain-row{ margin-top:18px; padding-top:16px; border-top:1px solid var(--border); }
+.custom-domain-input{ display:flex; gap:8px; margin-top:8px; }
+.text-input{ flex:1; background:var(--panel-2); border:1px solid var(--border); border-radius:10px; color:var(--text);
+  font-family:'Inter',sans-serif; font-size:14px; padding:11px 13px; outline:none; }
+.text-input:focus{ border-color:var(--cyan); }
+.custom-domain-input .btn{ padding:11px 16px; }
 
 .interview-shell{ margin-top:16px; }
 .interview-meta{ display:flex; justify-content:space-between; font-family:'JetBrains Mono',monospace; font-size:11.5px;
@@ -923,5 +991,9 @@ p{ margin:0; }
   .navbar{ padding:12px 16px; } .main{ padding:28px 16px 60px; }
   .radar-viz{ width:200px; height:200px; flex-basis:200px; }
   .nav-tab span{ display:none; } .nav-tab{ padding:9px; }
+}
+
+@media(prefers-reduced-motion:reduce){
+  *{ animation-duration:.001ms !important; animation-iteration-count:1 !important; transition-duration:.001ms !important; }
 }
 `;
