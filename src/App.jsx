@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import {
   Shield, Search, Brain, MessageSquare, FileText, TrendingUp, TrendingDown,
   AlertTriangle, Target, Send, Loader2, CheckCircle2, Sparkles,
-  Briefcase, ArrowRight, ChevronRight, RotateCcw, Radio,
+  Briefcase, ArrowRight, ChevronRight, RotateCcw, Radio, Upload, Copy, Check,
 } from "lucide-react";
 
 /* ------------------------------------------------------------------ */
@@ -62,6 +62,59 @@ async function askClaude(prompt) {
   } catch (e) {
     throw new Error(`Could not parse AI response: ${cleaned.slice(0, 200)}`);
   }
+}
+
+/* ------------------------------------------------------------------ */
+/* File-to-text helpers (PDF / DOCX upload for Resume Checker)         */
+/* Loaded from CDN on demand so no new npm packages / build steps       */
+/* are required.                                                        */
+/* ------------------------------------------------------------------ */
+
+function loadScript(src) {
+  return new Promise((resolve, reject) => {
+    if (document.querySelector(`script[src="${src}"]`)) {
+      resolve();
+      return;
+    }
+    const script = document.createElement("script");
+    script.src = src;
+    script.onload = () => resolve();
+    script.onerror = () => reject(new Error("Couldn't load a required library. Check your connection and try again."));
+    document.body.appendChild(script);
+  });
+}
+
+async function extractTextFromFile(file) {
+  const name = file.name.toLowerCase();
+
+  if (name.endsWith(".pdf")) {
+    await loadScript("https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js");
+    const pdfjsLib = window.pdfjsLib;
+    pdfjsLib.GlobalWorkerOptions.workerSrc =
+      "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+    const arrayBuffer = await file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+    let text = "";
+    for (let i = 1; i <= pdf.numPages; i++) {
+      const page = await pdf.getPage(i);
+      const content = await page.getTextContent();
+      text += content.items.map((it) => it.str).join(" ") + "\n";
+    }
+    return text.trim();
+  }
+
+  if (name.endsWith(".docx")) {
+    await loadScript("https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js");
+    const arrayBuffer = await file.arrayBuffer();
+    const result = await window.mammoth.extractRawText({ arrayBuffer });
+    return result.value.trim();
+  }
+
+  if (name.endsWith(".txt")) {
+    return (await file.text()).trim();
+  }
+
+  throw new Error("Please upload a PDF, DOCX, or TXT file.");
 }
 
 /* ------------------------------------------------------------------ */
@@ -522,6 +575,10 @@ function ResumeTab() {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
   const [error, setError] = useState("");
+  const [extracting, setExtracting] = useState(false);
+  const [fileName, setFileName] = useState("");
+  const [copied, setCopied] = useState(false);
+  const fileInputRef = useRef(null);
 
   const check = async () => {
     if (!input.trim()) return;
@@ -534,7 +591,7 @@ function ResumeTab() {
 ${input}
 """
 Return ONLY minified JSON, no markdown, in exactly this shape:
-{"atsScore": <integer 0-100>, "verdict": "<one direct line on where it stands>", "missingKeywords": ["<keyword>", "<keyword>", "<keyword>"], "suggestions": ["<concrete, line-level fix>", "<fix>", "<fix>"]}`;
+{"atsScore": <integer 0-100>, "verdict": "<one direct line on where it stands>", "missingKeywords": ["<keyword>", "<keyword>", "<keyword>"], "suggestions": ["<concrete, line-level fix>", "<fix>", "<fix>"], "improvedResume": "<the full resume rewritten to be more professional — stronger action verbs, quantified achievements where the original plausibly supports it, cleaner structure, missing keywords woven in naturally. Stay truthful to the original facts; do not invent employers, titles, or numbers. Use \\n for line breaks between sections/lines.>"}`;
       const res = await askClaude(prompt);
       setResult(res);
     } catch (e) {
@@ -543,16 +600,59 @@ Return ONLY minified JSON, no markdown, in exactly this shape:
     setLoading(false);
   };
 
+  const handleFile = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setError("");
+    setExtracting(true);
+    setFileName(file.name);
+    try {
+      const text = await extractTextFromFile(file);
+      if (!text) throw new Error("Couldn't find any readable text in that file.");
+      setInput(text);
+    } catch (err) {
+      setError(err.message || "Couldn't read that file. Try pasting the text instead.");
+      setFileName("");
+    }
+    setExtracting(false);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const copyImproved = () => {
+    if (!result?.improvedResume) return;
+    navigator.clipboard.writeText(result.improvedResume);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
   return (
     <div className="tab-pane">
       <Eyebrow>PLACEMENT READINESS</Eyebrow>
       <h2>AI Resume Checker.</h2>
-      <p className="muted">Scores your resume against ATS filters, flags missing AI-role keywords, and suggests concrete fixes.</p>
+      <p className="muted">Upload or paste your resume — Claude scores it against ATS filters, flags missing AI-role keywords, and rewrites it to be stronger.</p>
 
       <div className="panel">
+        <div className="upload-row">
+          <button
+            className="btn btn-ghost"
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={extracting}
+          >
+            {extracting ? <><Loader2 size={16} className="spin" /> Reading file…</> : <><Upload size={16} /> Upload PDF / DOCX</>}
+          </button>
+          {fileName && !extracting && <span className="hint">{fileName}</span>}
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".pdf,.docx,.txt"
+            style={{ display: "none" }}
+            onChange={handleFile}
+          />
+        </div>
         <textarea
           className="textarea"
-          placeholder="Paste your resume text here…"
+          placeholder="Paste your resume text here… or upload a file above"
           value={input}
           onChange={(e) => setInput(e.target.value)}
           rows={6}
@@ -567,27 +667,41 @@ Return ONLY minified JSON, no markdown, in exactly this shape:
       </div>
 
       {result && (
-        <div className="result-grid">
-          <div className="panel result-score">
-            <Gauge score={result.atsScore} label="ATS MATCH SCORE" />
-            <p className="result-summary">{result.verdict}</p>
-          </div>
-          <div className="panel result-priorities">
-            <div className="panel-title"><AlertTriangle size={16} /> Missing keywords</div>
-            <div className="chip-row">
-              {(result.missingKeywords || []).map((k, i) => (
-                <span className="chip chip-static chip-warn" key={i}>{k}</span>
+        <>
+          <div className="result-grid">
+            <div className="panel result-score">
+              <Gauge score={result.atsScore} label="ATS MATCH SCORE" />
+              <p className="result-summary">{result.verdict}</p>
+            </div>
+            <div className="panel result-priorities">
+              <div className="panel-title"><AlertTriangle size={16} /> Missing keywords</div>
+              <div className="chip-row">
+                {(result.missingKeywords || []).map((k, i) => (
+                  <span className="chip chip-static chip-warn" key={i}>{k}</span>
+                ))}
+              </div>
+              <div className="panel-title" style={{ marginTop: 16 }}><Sparkles size={16} /> Fix these</div>
+              {(result.suggestions || []).map((s, i) => (
+                <div className="priority-row" key={i}>
+                  <span className="priority-num">{i + 1}</span>
+                  <div className="priority-skill" style={{ fontWeight: 400 }}>{s}</div>
+                </div>
               ))}
             </div>
-            <div className="panel-title" style={{ marginTop: 16 }}><Sparkles size={16} /> Fix these</div>
-            {(result.suggestions || []).map((s, i) => (
-              <div className="priority-row" key={i}>
-                <span className="priority-num">{i + 1}</span>
-                <div className="priority-skill" style={{ fontWeight: 400 }}>{s}</div>
-              </div>
-            ))}
           </div>
-        </div>
+
+          {result.improvedResume && (
+            <div className="panel" style={{ marginTop: 16 }}>
+              <div className="panel-actions" style={{ marginTop: 0, marginBottom: 12 }}>
+                <div className="panel-title" style={{ marginBottom: 0 }}><Sparkles size={16} /> Improved Resume</div>
+                <button className="btn btn-ghost" onClick={copyImproved}>
+                  {copied ? <><Check size={15} /> Copied</> : <><Copy size={15} /> Copy text</>}
+                </button>
+              </div>
+              <pre className="improved-resume">{result.improvedResume}</pre>
+            </div>
+          )}
+        </>
       )}
     </div>
   );
@@ -762,6 +876,10 @@ p{ margin:0; }
 .hint{ color:var(--dim); font-size:12px; display:flex; align-items:center; gap:6px; }
 .error-note{ display:flex; align-items:center; gap:7px; color:var(--red); font-size:13px; margin-top:10px; }
 .spin{ animation:spin 1s linear infinite; } @keyframes spin{ to{ transform:rotate(360deg); } }
+
+.upload-row{ display:flex; align-items:center; gap:12px; margin-bottom:14px; flex-wrap:wrap; }
+.improved-resume{ white-space:pre-wrap; font-family:'Inter',sans-serif; font-size:13.5px; line-height:1.7; color:var(--text);
+  background:var(--panel-2); border-radius:10px; padding:16px; max-height:520px; overflow-y:auto; margin:0; }
 
 .result-grid{ display:grid; grid-template-columns:280px 1fr; gap:16px; margin-top:16px; }
 @media(max-width:720px){ .result-grid{ grid-template-columns:1fr; } }
